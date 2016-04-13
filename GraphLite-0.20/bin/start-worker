@@ -1,0 +1,26 @@
+#!/bin/bash
+
+ulimit -c unlimited
+
+mydir=`dirname $0`
+
+. ${mydir}/setenv
+
+NUMBER=$#
+
+i=0
+while [ $i -lt $NUMBER ]
+do
+    args[$i]=$1
+    ((i++))
+    shift     # now $1 is the next arg
+done
+
+cmd=${args[0]}
+for (( i=1 ; i<$NUMBER-1 ; i++ ))
+do
+    cmd+=" "${args[$i]}
+done
+
+mkdir -p WorkerOut
+$cmd > WorkerOut/worker${args[$NUMBER-1]}.out 2>&1 </dev/null &

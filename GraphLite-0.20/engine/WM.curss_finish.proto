@@ -1,0 +1,19 @@
+/** message from worker to master */
+package wm;
+
+/**
+ * Current superstep finishes.
+ * Worker sends this message to master after current superstep computing finishes.
+ * message type: 2
+ */
+message curss_finish {
+    required int32 s_id = 1;       /**< worker id */
+    required int32 d_id = 2;       /**< master id */
+    required int32 superstep = 3;  /**< current superstep number */
+    required int64 compute = 4;    /**< count of computations in current superstep */
+    required int64 recv_msg = 5;   /**< count of messages received in current superstep */
+    required int64 sent_msg = 6;   /**< count of messages sent in current superstep */
+    repeated int64 worker_msg = 7; /**< count of messages for each worker in current superstep */
+    required int64 act_vertex = 8; /**< count of active vertices left after current superstep */
+    repeated bytes aggr_local = 9; /**< local aggregator value after current superstep */
+}

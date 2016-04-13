@@ -1,0 +1,12 @@
+/** message from worker to master */
+package wm;
+
+/**
+ * Request for whole supersteps begin.
+ * message type: 0
+ */
+message begin {
+    required int32 s_id = 1;  /**< worker id */
+    required int32 d_id = 2;  /**< master id */
+    required int32 state = 3; /**< 0: ready to begin, 1: not ready to begin */
+}

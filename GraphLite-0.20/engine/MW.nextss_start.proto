@@ -1,0 +1,15 @@
+/** message from master to worker */
+package mw;
+
+/**
+ * Next superstep starts.
+ * Master sends this message to all workers before next superstep starts.
+ * message type: 3
+ */
+message nextss_start {
+    required int32 s_id = 1;        /**< master id */
+    required int32 d_id = 2;        /**< worker id */
+    required int32 superstep = 3;   /**< next superstep number */
+    required int64 node_msg = 4;    /**< count of node messages the worker should receive before next superstep */
+    repeated bytes aggr_global = 5; /**< global aggregator value before next superstep */
+}

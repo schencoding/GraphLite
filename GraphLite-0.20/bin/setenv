@@ -1,0 +1,28 @@
+#!/bin/bash
+
+export JAVA_HOME=/usr/local/java/jdk1.7.0_40
+
+export HADOOP_HOME=/home/chensm/java/hadoop-2.6.0
+export GRAPHLITE_HOME=/home/chensm/java/2016Q1-BDMS/graphlite/GraphLite-0.20
+
+#export HADOOP_HOME=/usr/local/java/hadoop-2.6.0
+#export GRAPHLITE_HOME=/home/guest/work/hw2/GraphLite-0.20
+
+# -----------------------------------------------------------------------------
+# STOP: no need to change the following
+
+# java
+export JRE_HOME=${JAVA_HOME}/jre
+export CLASSPATH=.:$JAVA_HOME/lib:$JRE_HOME/lib
+
+# hadoop
+export CLASSPATH=$CLASSPATH:`$HADOOP_HOME/bin/hadoop classpath --glob`
+
+export PATH=$PATH:$JAVA_HOME/bin:$JRE_HOME/bin:${GRAPHLITE_HOME}/bin
+
+machine=`uname -m`
+if [ ${machine} == 'x86_64' ]; then
+export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native:$JRE_HOME/lib/amd64/server
+else
+export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native:$JRE_HOME/lib/i386/server
+fi

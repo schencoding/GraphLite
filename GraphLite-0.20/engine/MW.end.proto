@@ -1,0 +1,12 @@
+/** message from master to worker */
+package mw;
+
+/*
+ * Notify workers to end supersteps.
+ * message type: 4
+ */
+message end {
+    required int32 s_id = 1;  /**< master id */
+    required int32 d_id = 2;  /**< worker id */
+    required int32 state = 3; /**< 0: OK to end, 1: need to go on */
+}

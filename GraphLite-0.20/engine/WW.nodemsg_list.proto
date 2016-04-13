@@ -1,0 +1,18 @@
+/** message from worker to worker */
+package ww;
+
+/**
+ * Node2Node message list.
+ * Worker may send a series of this message to dest-worker during a superstep.
+ * If num_msgs is 0, this is a signal which means the worker have finished
+ * sending node2node messages to dest-worker in current superstep.
+ * message type: 6
+ */
+message nodemsg_list {
+    required int32 s_id = 1;      /**< source worker id */
+    required int32 d_id = 2;      /**< destination worker id */
+    required int32 superstep = 3; /**< current superstep number */
+    required int32 num_msgs = 4;  /**< number of node messages on the list */
+    required int32 msg_size = 5;  /**< size of one piece of node message */
+    required bytes msgs = 6;      /**< content of compressed node messages */
+}
