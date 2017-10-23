@@ -165,6 +165,11 @@ void Sender::sendMsg() {
                     ret = send(m_sock_fd[i], m_out_buffer[i].m_buffer + m_out_buffer[i].m_head,
                                m_out_buffer[i].m_buf_len, MSG_DONTWAIT);
                     // printf("Sender: ret %d\n", ret); fflush(stdout);
+                    if (ret == 0 || (ret < 0 && (*__error()) != EAGAIN && (*__error()) != EWOULDBLOCK)) {
+                        FD_CLR(m_sock_fd[i], &fds_orig);
+                        continue;
+                    }
+                    if (ret < 0) ret = 0;
 
                     pthread_mutex_lock(&m_out_mutex);
                     if (ret < m_out_buffer[i].m_buf_len) {
