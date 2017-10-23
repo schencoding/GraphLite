@@ -181,7 +181,7 @@ void Receiver::recvMsg() {
                         ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
                                    sizeof(m_in_buffer[i].m_buf_len) - m_in_buffer[i].m_tail, MSG_DONTWAIT);
                         // printf("Receiver: buf_len ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && (*__error()) != EAGAIN && (*__error()) != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
+                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
                             FD_CLR(m_sock_fd[i], &fds_orig);
                             continue;
                         }
@@ -200,7 +200,7 @@ void Receiver::recvMsg() {
                         ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
                                    m_in_buffer[i].m_msg_len, MSG_DONTWAIT);
                         // printf("Receiver: ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && (*__error()) != EAGAIN && (*__error()) != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
+                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
                             FD_CLR(m_sock_fd[i], &fds_orig);
                             continue;
                         }
