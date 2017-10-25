@@ -111,7 +111,7 @@ void Sender::connectServer(int id) {
                 if (retries >= 60) {
                   fprintf(stderr, "Sender cannot connect after %d retries\n", 
                           retries);
-                  exit(1);
+                  // exit(1);
                 }
             }
 
@@ -166,7 +166,7 @@ void Sender::sendMsg() {
                                m_out_buffer[i].m_buf_len, MSG_DONTWAIT);
                     // printf("Sender: ret %d\n", ret); fflush(stdout);
                     if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                        FD_CLR(m_sock_fd[i], &fds_orig);
+                        FD_CLR(m_sock_fd[i], &m_fds);
                         continue;
                     }
                     if (ret < 0) ret = 0;
