@@ -4,7 +4,7 @@
 
 CXX= g++
 
-CFLAGS_COMMON=-std=c++0x -g -O2 -Wall -Wno-strict-aliasing -I../include
+CFLAGS_COMMON=-std=c++0x -g -O3 -Wall -Wno-strict-aliasing -I../include
 #CFLAGS_COMMON=-std=c++0x -g -O0 -DDEBUG_LVL_1 -DDEBUG_LVL_2 -I../include
 
 INCLD_HDFS=-I$(HADOOP_HOME)/include
