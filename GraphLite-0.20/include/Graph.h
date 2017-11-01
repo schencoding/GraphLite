@@ -80,6 +80,10 @@ public:
         m_paddr_table[id].port = port;
     }
 
+    /**
+     * Format of hosts_str: localhost:1500,localhost:1501,localhost:1502
+     * The first address for master.
+     * */
     void setupHosts(const char* hosts_str) {
         printf("\nsetup hosts:\n");
         std::string hs = std::string(hosts_str);
