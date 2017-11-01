@@ -85,7 +85,7 @@ public:
      * The first address for master.
      * */
     void setupHosts(const char* hosts_str) {
-        printf("\nsetup hosts:\n");
+        // printf("\nsetup hosts:\n");
         std::string hs = std::string(hosts_str);
         int num_hosts = std::count(hs.begin(), hs.end(), ':');
         setNumHosts(num_hosts);
@@ -102,7 +102,7 @@ public:
                 hs.substr(port_pos, hostname_pos - port_pos - 1),
                 NULL
             );
-            printf("host %d: %s:%d\n", id, m_paddr_table[id].hostname, m_paddr_table[id].port); fflush(stdout);
+            // printf("host %d: %s:%d\n", id, m_paddr_table[id].hostname, m_paddr_table[id].port); fflush(stdout);
         }
     }
 
