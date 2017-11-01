@@ -37,6 +37,9 @@
 
 #include <string.h>
 
+#include <string>
+#include <algorithm>
+
 #include "VertexBase.h"
 #include "InputFormatter.h"
 #include "OutputFormatter.h"
@@ -77,6 +80,32 @@ public:
         m_paddr_table[id].port = port;
     }
 
+    /**
+     * Format of hosts_str: localhost:1500,localhost:1501,localhost:1502
+     * The first address for master.
+     * */
+    void setupHosts(const char* hosts_str) {
+        // printf("\nsetup hosts:\n");
+        std::string hs = std::string(hosts_str);
+        int num_hosts = std::count(hs.begin(), hs.end(), ':');
+        setNumHosts(num_hosts);
+
+        int hostname_pos = 0;
+        int port_pos = 0;
+        for (int id = 0; id < num_hosts; ++id) {
+            port_pos = hs.find_first_of(":", hostname_pos) + 1;
+            m_paddr_table[id].id = id;
+            hs.copy(m_paddr_table[id].hostname, port_pos - hostname_pos - 1, hostname_pos);
+            m_paddr_table[id].hostname[port_pos - hostname_pos - 1] = '\0';
+            hostname_pos = hs.find_first_of(",", port_pos) + 1;
+            m_paddr_table[id].port = std::stoi(
+                hs.substr(port_pos, hostname_pos - port_pos - 1),
+                NULL
+            );
+            // printf("host %d: %s:%d\n", id, m_paddr_table[id].hostname, m_paddr_table[id].port); fflush(stdout);
+        }
+    }
+
     void regNumAggr(int num) {
         if (num <= 0) return;
 
@@ -90,8 +119,6 @@ public:
         m_paggregator[id]= aggr;
     }
 
-
-public:
     Graph(){
       setNumHosts(1);
       setHost(0, "localhost", 1411);
