@@ -41,11 +41,11 @@ int Msg::m_size;
 int Node::n_value_size;
 int Node::n_size;
 
-Node& Node::getNode(int index) {
+Node& Node::getNode(int64_t index) {
     return *( (Node *)( (char *)(worker.m_pnode) + index * Node::n_size ) );
 }
 
-Edge& Node::getEdge(int index) {
+Edge& Node::getEdge(int64_t index) {
     return *( (Edge *)( (char *)(worker.m_pedge) + index * Edge::e_size ) );
 }
 
@@ -64,7 +64,7 @@ void Node::recvNewMsg(Msg* pmsg) {
 void Node::clearCurInMsg() {
     if ( m_cur_in_msg.size() ) {
 
-        for (int i = m_cur_in_msg.size() - 1; i >= 0; --i) {
+        for (int64_t i = m_cur_in_msg.size() - 1; i >= 0; --i) {
             worker.m_free_list.free(m_cur_in_msg[i]);
         }
 
@@ -136,7 +136,7 @@ void Node::sendMessageTo(int64_t dest_vertex, const char* pmessage) {
 
 void Node::sendMessageToAllNeighbors(const char* pmessage) {
     char* pedge = (char *)(worker.m_pedge) + m_edge_index * Edge::e_size;
-    for (int i = 0; i < m_out_degree; ++i) {
+    for (int64_t i = 0; i < m_out_degree; ++i) {
         sendMessageTo( ( (Edge *)pedge )->to, pmessage );
         pedge += Edge::e_size;
     }

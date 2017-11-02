@@ -22,5 +22,5 @@ do
     cmd+=" "${args[$i]}
 done
 
-mkdir -p WorkerOut
-$cmd > WorkerOut/worker${args[$NUMBER-1]}.out 2>&1 </dev/null &
+mkdir -p ${mydir}/../WorkerOut
+$cmd > ${mydir}/../WorkerOut/worker${args[$NUMBER-1]}.out 2>&1 </dev/null &

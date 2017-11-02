@@ -300,7 +300,7 @@ void Worker::init() {
   maynot be stored continuously in node array in consideration of vertices
   with no outedges.
 */
-void Worker::addVertex(int64_t vid, void* pvalue, int outdegree) {
+void Worker::addVertex(int64_t vid, void* pvalue, int64_t outdegree) {
     int worker_cnt = m_machine_cnt - 1;
     int64_t index = vid / worker_cnt; // hash partition
     Node* pnode = (Node *)( (char *)m_pnode + index * Node::n_size );
