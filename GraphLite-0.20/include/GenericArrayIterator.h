@@ -60,6 +60,8 @@ public:
 
     /** Go to visit next element. */
     void next() { m_pbegin += m_element_size; }
+    /** Go to visit next K element. */
+    void next(int64_t k) { m_pbegin += k * m_element_size; }
 
     /**
      * Judge if iterator terminates or not.

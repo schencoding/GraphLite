@@ -183,7 +183,7 @@ public:
      * @param pvalue pointer of vertex value
      * @param outdegree vertex outdegree
      */
-    void addVertex(int64_t vid, void* pvalue, int outdegree);
+    void addVertex(int64_t vid, void* pvalue, int64_t outdegree);
 
     /**
      * Add an edge to system storage for graph.

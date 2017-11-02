@@ -52,9 +52,9 @@ typedef struct Msg {
 /** Definition of GenericLinkIterator class. */
 class GenericLinkIterator {
 public:
-    vector<Msg*>*  m_pvector;     /**< pointer of vector to be iterated on */
-    int            m_vector_size; /**< vector size */
-    int            m_cur_index;   /**< index of current element in vector */
+    vector<Msg*>* m_pvector;     /**< pointer of vector to be iterated on */
+    int64_t       m_vector_size; /**< vector size */
+    int64_t       m_cur_index;   /**< index of current element in vector */
 
 public:
     /**

@@ -58,7 +58,7 @@ class Node {
 public:
     bool m_active;        /**< vertex state: active m_active=1, inactive m_active=0 */
     int64_t m_v_id;       /**< vertex id */
-    int m_out_degree;     /**< vertex outdegree */
+    int64_t m_out_degree;     /**< vertex outdegree */
     int64_t m_edge_index; /**< index of first edge from this vertex in edge array */
     std::vector<Msg*> m_cur_in_msg; /**< current superstep in-message pointer list */
     char value[0];                  /**< start positon of memory to store node value */
@@ -73,14 +73,14 @@ public:
      * @param index node index
      * @return a Node structure of index in node array
      */
-    static Node& getNode(int index);
+    static Node& getNode(int64_t index);
 
     /**
      * Get an Eode structure of index in edge array.
      * @param index edge index
      * @return an Edge structure of index in edge array
      */
-    static Edge& getEdge(int index);
+    static Edge& getEdge(int64_t index);
 
     /** Initialize pointers of in-message lists. */
     void initInMsg();
