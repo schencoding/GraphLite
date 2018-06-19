@@ -63,6 +63,8 @@ public:
         return m_m_value_size;
     }
     void loadGraph() {
+        if (m_total_edge <= 0)  return;
+
         unsigned long long last_vertex;
         unsigned long long from;
         unsigned long long to;
