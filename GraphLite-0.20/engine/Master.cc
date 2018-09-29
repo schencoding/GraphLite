@@ -182,6 +182,7 @@ void Master::init() {
 }
 
 int Master::sendBegin(int worker_id) {
+    int ret = 1;
 
     // 1. Set message content to be sent.
     m_mw_begin.s_id = 0;
@@ -202,16 +203,16 @@ int Master::sendBegin(int worker_id) {
             m_sender.m_out_buffer[worker_id].m_head = 0;
             m_sender.m_out_buffer[worker_id].m_tail = m_sender.m_out_buffer[worker_id].m_buf_len;
             m_sender.m_out_buffer[worker_id].m_state = 1;
+            ret = 0;
         }
         pthread_mutex_unlock(&m_sender.m_out_mutex);
-
-        return 0;
     } // else can't write to m_out_buffer
 
-    return 1;
+    return ret;
 }
 
 int Master::sendNextssstart(int worker_id) {
+    int ret = 1;
 
     // 1. Set message content to be sent.
     m_mw_nextssstart.s_id = 0;
@@ -235,16 +236,16 @@ int Master::sendNextssstart(int worker_id) {
             m_sender.m_out_buffer[worker_id].m_head = 0;
             m_sender.m_out_buffer[worker_id].m_tail = m_sender.m_out_buffer[worker_id].m_buf_len;
             m_sender.m_out_buffer[worker_id].m_state = 1;
+            ret = 0;
         }
         pthread_mutex_unlock(&m_sender.m_out_mutex);
-
-        return 0;
     } // else can't write to m_out_buffer
 
-    return 1;
+    return ret;
 }
 
 int Master::sendEnd(int worker_id) {
+    int ret = 1;
 
     // 1. Set message content to be sent.
     m_mw_end.s_id = 0;
@@ -266,13 +267,12 @@ int Master::sendEnd(int worker_id) {
             m_sender.m_out_buffer[worker_id].m_head = 0;
             m_sender.m_out_buffer[worker_id].m_tail = m_sender.m_out_buffer[worker_id].m_buf_len;
             m_sender.m_out_buffer[worker_id].m_state = 1;
+            ret = 0;
         }
         pthread_mutex_unlock(&m_sender.m_out_mutex);
-
-        return 0;
     } // else can't write to m_out_buffer
 
-    return 1;
+    return ret;
 }
 
 void Master::sendAll(int msg_type) {

@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * @see Worker.h
  *
  */
@@ -402,7 +402,7 @@ void Worker::recvNewNodeMsg(Msg* pmsg) {
 void Worker::recvNewNodeMsg2(Msg* pmsg) {
     switch (m_imdm) {
     case IMDM_OPT_PLAIN:
-    case IMDM_OPT_GROUP_PREF: 
+    case IMDM_OPT_GROUP_PREF:
     case IMDM_OPT_SWPL_PREF:
         {
         m_pnext2_all_in_msg_chunklist->append(pmsg);
@@ -415,7 +415,7 @@ void Worker::recvNewNodeMsg2(Msg* pmsg) {
 
 void Worker::deliverAllNewNodeMsg() {
     Node* np;
-    
+
     // Deliver messages to next_in_msg in each node.
     switch (m_imdm) {
     case IMDM_OPT_PLAIN: { // This uses the data structure but does not optimize.
@@ -464,7 +464,7 @@ void Worker::deliverAllNewNodeMsg() {
                 nd[j] = (Node *)( (char *)m_pnode + index * Node::n_size );
                 prefetch(nd[j]);
              }
-        
+
              // (3) deliver message
              for (int j = 0; j < pref_group_size; j++) {
                 nd[j]->recvNewMsg(msg[j]);
@@ -659,6 +659,7 @@ void Worker::sendEnd() {
 }
 
 int Worker::sendNodeMessage(int worker_id, int num_msg) {
+    int ret = 1;
 
     // 1. Get new messages in current superstep from other workers if necessary.
     for (int j = 1; j < m_machine_cnt; ++j) receiveMessage(j);
@@ -685,13 +686,12 @@ int Worker::sendNodeMessage(int worker_id, int num_msg) {
             m_sender.m_out_buffer[worker_id].m_head = 0;
             m_sender.m_out_buffer[worker_id].m_tail = m_sender.m_out_buffer[worker_id].m_buf_len;
             m_sender.m_out_buffer[worker_id].m_state = 1;
+            ret = 0;
         }
         pthread_mutex_unlock(&m_sender.m_out_mutex);
-
-        return 0;
     } // else can't write to m_out_buffer
 
-    return 1;
+    return ret;
 }
 
 void Worker::receiveMessage(int machine_id) {
@@ -793,7 +793,7 @@ void Worker::performSuperstep() {
     // The in-message lists are empty.
     switch (m_imdm) {
     case IMDM_OPT_PLAIN:
-    case IMDM_OPT_GROUP_PREF: 
+    case IMDM_OPT_GROUP_PREF:
     case IMDM_OPT_SWPL_PREF:
         {
         m_pnext_all_in_msg_chunklist = new ChunkedList();
@@ -814,7 +814,7 @@ void Worker::performSuperstep() {
     m_from_master = 0;
     while (! m_from_master) receiveMessage(0);
     printf("received MW_BEGIN\n"); fflush(stdout);
- 
+
     // 4. Run into supersteps.
     int msg2send; // count of messages to send, used in 4.4 & 4.5
     m_term = 0;
@@ -904,7 +904,7 @@ void Worker::performSuperstep() {
             for (int j = 1; j < m_machine_cnt; ++j) receiveMessage(j);
         }
         printf("received all WW_NODEMSGLIST && WW_FINISHNODEMSG\n"); fflush(stdout);
-        
+
         // 4.7 Send current superstep finish to master.
         sendCurssfinish();
         printf("sent WM_CURSSFINISH\n"); fflush(stdout);
@@ -934,11 +934,11 @@ void Worker::writeOutput() {
     printf("writeOutput\n"); fflush(stdout);
 
     m_pmy_out_formatter->open(m_pout_path);
-    
+
     res_iter.init(m_pnode, m_total_vertex);
 
     m_pmy_out_formatter->writeResult();
-    
+
     m_pmy_out_formatter->close();
 }
 
