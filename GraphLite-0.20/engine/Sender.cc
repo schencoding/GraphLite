@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * @see Sender.h
  *
  */
@@ -32,6 +32,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/epoll.h>
+
+#include <unordered_map>
 
 #include "Sender.h"
 
@@ -109,7 +112,7 @@ void Sender::connectServer(int id) {
             if (retries % 10 == 0) {
                 perror("Sender: connect");
                 if (retries >= 60) {
-                  fprintf(stderr, "Sender cannot connect after %d retries\n", 
+                  fprintf(stderr, "Sender cannot connect after %d retries\n",
                           retries);
                   // exit(1);
                 }
@@ -127,70 +130,79 @@ void Sender::connectServer(int id) {
 }
 
 void Sender::sendMsg() {
-    fd_set fds_orig;
-    struct timeval tv;
-    int ret;
-
-    FD_ZERO(&fds_orig);
-    for (int i = 0; i < m_serv_cnt; ++i) {
-        FD_SET(m_sock_fd[i], &fds_orig);
+    int max_events = m_serv_cnt;
+    int epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) {
+        fprintf(stderr, "Failed to create epoll file descriptor\n");
+        exit(1);
     }
 
-    // int loop = 0;
+    struct epoll_event *events = (struct epoll_event*)malloc(
+        max_events * sizeof(struct epoll_event));
+    if (events == NULL) {
+        fprintf(stderr, "Failed to create epoll_event\n");
+        exit(1);
+    }
+
+    std::unordered_map<int, int> sock_fd_to_server_idx;
+    for (int i = 0; i < m_serv_cnt; ++i) {
+      sock_fd_to_server_idx[m_sock_fd[i]] = i;
+    }
+
+    struct epoll_event ev;
+    for (int i = 0; i < m_serv_cnt; ++i) {
+        ev.events = EPOLLOUT;
+        ev.data.fd = m_sock_fd[i];
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_sock_fd[i], &ev) != 0) {
+            fprintf(stderr, "Failed to add epoll event\n");
+            exit(1);
+        }
+    }
+
     while (! main_term) {
-        // ++loop;
-        // printf("Sender: loop %d\n", loop); fflush(stdout);
-
-        FD_ZERO(&m_fds);
-        m_fds = fds_orig;
-
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-
-        ret = select(m_max_sock + 1, NULL, &m_fds, NULL, &tv); // writable
-        // printf("Sender: select ret %d\n", ret); fflush(stdout);
-        if (ret < 0) {
-            perror("Sender: select");
+        int event_cnt = epoll_wait(epoll_fd, events, max_events, 1000);
+        if (event_cnt < 0) {
+            perror("Sender: epoll_wait");
             break;
-        } else if (!ret) {
-            printf("Sender: timeout\n"); fflush(stdout);
+        } else if (event_cnt == 0) {
+            // printf("Sender: timeout\n");
+            // fflush(stdout);
             continue;
         }
+        for (int i = 0; i < event_cnt; i++) {
+            int fd = events[i].data.fd;
+            int s_idx = sock_fd_to_server_idx[fd];
+            if (m_out_buffer[s_idx].m_state) {
+                int ret = send(
+                    fd,
+                    m_out_buffer[s_idx].m_buffer + m_out_buffer[s_idx].m_head,
+                    m_out_buffer[s_idx].m_buf_len, MSG_DONTWAIT);
 
-        for (int i = 0; i < m_serv_cnt; ++i) {
-            if (m_out_buffer[i].m_state) { // At least one buffer has data.
-                if ( FD_ISSET(m_sock_fd[i], &m_fds) ) { // Socket i has been set.
-                    // send
-                    // printf("Sender: send()\n"); fflush(stdout);
-                    ret = send(m_sock_fd[i], m_out_buffer[i].m_buffer + m_out_buffer[i].m_head,
-                               m_out_buffer[i].m_buf_len, MSG_DONTWAIT);
-                    // printf("Sender: ret %d\n", ret); fflush(stdout);
-                    if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                        FD_CLR(m_sock_fd[i], &m_fds);
-                        continue;
-                    }
-                    if (ret < 0) ret = 0;
-
-                    pthread_mutex_lock(&m_out_mutex);
-                    if (ret < m_out_buffer[i].m_buf_len) {
-                        m_out_buffer[i].m_head += ret;
-                        m_out_buffer[i].m_buf_len -= ret;
-                    } else if (ret == m_out_buffer[i].m_buf_len) {
-                        m_out_buffer[i].m_state = 0;
-                        m_out_buffer[i].m_head = 0;
-                        m_out_buffer[i].m_tail = 0;
-                        m_out_buffer[i].m_msg_len = 0;
-                        m_out_buffer[i].m_buf_len = 0;
-                        // memset m_out_buffer[i].m_buffer
-                    }
-                    pthread_cond_signal(&m_out_cond);
-                    pthread_mutex_unlock(&m_out_mutex);
+                if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                    continue;
                 }
+                if (ret < 0) ret = 0;
+
+                pthread_mutex_lock(&m_out_mutex);
+                if (ret < m_out_buffer[s_idx].m_buf_len) {
+                    m_out_buffer[s_idx].m_head += ret;
+                    m_out_buffer[s_idx].m_buf_len -= ret;
+                } else if (ret == m_out_buffer[s_idx].m_buf_len) {
+                    m_out_buffer[s_idx].m_state = 0;
+                    m_out_buffer[s_idx].m_head = 0;
+                    m_out_buffer[s_idx].m_tail = 0;
+                    m_out_buffer[s_idx].m_msg_len = 0;
+                    m_out_buffer[s_idx].m_buf_len = 0;
+                    // memset m_out_buffer[s_idx].m_buffer
+                }
+                pthread_cond_signal(&m_out_cond);
+                pthread_mutex_unlock(&m_out_mutex);
             }
         }
     }
 
-    // printf("Sender: break select\n"); fflush(stdout);
+    free(events);
+    close(epoll_fd);
 }
 
 void Sender::closeAllSocket() {

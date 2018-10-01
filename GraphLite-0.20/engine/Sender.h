@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * This file defined Sender class used to send messages between machines.
 
  * We temporarily choose TCP/IP as communication protocol through socket,

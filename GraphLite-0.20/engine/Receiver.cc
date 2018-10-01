@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * @see Receiver.h
  *
  */
@@ -32,6 +32,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/epoll.h>
+
+#include <unordered_map>
 
 #include "Receiver.h"
 
@@ -122,110 +125,118 @@ void Receiver::acceptClient() {
         recv(sock, buffer, sizeof(buffer), 0);
         machine_no = atoi(buffer);
         m_sock_fd[machine_no] = sock;
-        
+
     }
 
     printf("Receiver: accept all client success\n"); fflush(stdout);
 }
 
 void Receiver::recvMsg() {
-    fd_set fds_orig;
-    struct timeval tv;
-    int ret;
-
-    FD_ZERO(&fds_orig);
-    for (int i = 0; i < m_cli_cnt; ++i) {
-        FD_SET(m_sock_fd[i], &fds_orig);
+    int max_events = m_cli_cnt;
+    int epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) {
+        fprintf(stderr, "Failed to create epoll file descriptor\n");
+        exit(1);
     }
 
-    // int loop = 0;
+    struct epoll_event *events = (struct epoll_event*)malloc(
+        max_events * sizeof(struct epoll_event));
+    if (events == NULL) {
+        fprintf(stderr, "Failed to create epoll_event\n");
+        exit(1);
+    }
+
+    std::unordered_map<int, int> sock_fd_to_server_idx;
+    for (int i = 0; i < m_cli_cnt; ++i) {
+      sock_fd_to_server_idx[m_sock_fd[i]] = i;
+    }
+
+    struct epoll_event ev;
+    for (int i = 0; i < m_cli_cnt; ++i) {
+        ev.events = EPOLLIN;
+        ev.data.fd = m_sock_fd[i];
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_sock_fd[i], &ev) != 0) {
+            fprintf(stderr, "Failed to add epoll event\n");
+            exit(1);
+        }
+    }
+
+    int ret = -1;
     int retries = 0;
     while (! main_term) {
-        // ++loop;
-        // printf("Receiver: loop %d\n", loop); fflush(stdout);
-
-        FD_ZERO(&m_fds);
-        m_fds = fds_orig;
-
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-
-        ret = select(m_max_sock + 1, &m_fds, NULL, NULL, &tv); // readable
-        // printf("Receiver: select ret %d\n", ret); fflush(stdout);
-        if (ret < 0) {
-            perror("Receiver: select");
+        int event_cnt = epoll_wait(epoll_fd, events, max_events, 1000);
+        if (event_cnt < 0) {
+            perror("Receiver: epoll_wait");
             break;
-        } else if (!ret) {
+        } else if (event_cnt == 0) {
             ++retries;
             if (retries % 100 == 0) {
-               printf("Receiver: timeout\n"); fflush(stdout);
+               printf("Receiver: timeout\n");
+               fflush(stdout);
             }
-
             sleep(1);
             continue;
         }
 
-        for (int i = 0; i < m_cli_cnt; ++i) {
-            if (! m_in_buffer[i].m_state) { // At least one buffer doesn't have complete data.
-                if ( FD_ISSET(m_sock_fd[i], &m_fds) ) { // Socket i has been set.
+        for (int i = 0; i < event_cnt; ++i) {
+            int fd = events[i].data.fd;
+            int s_idx = sock_fd_to_server_idx[fd];
+            if (! m_in_buffer[s_idx].m_state) {
+                // get buf_len remained
+                pthread_mutex_lock(&m_in_mutex);
+                int buf_len = m_in_buffer[s_idx].m_buf_len;
+                pthread_mutex_unlock(&m_in_mutex);
 
-                    // get buf_len remained
-                    pthread_mutex_lock(&m_in_mutex);
-                    int buf_len = m_in_buffer[i].m_buf_len;
-                    pthread_mutex_unlock(&m_in_mutex);
-
-                    // Every message needs to call recv() at least twice, first for message length and rest for the content.
-                    if (! buf_len) { // buf_len hasn't been read in completely.
-                        // receive
-                        // printf("Receiver: buf_len recv()\n"); fflush(stdout);
-                        ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
-                                   sizeof(m_in_buffer[i].m_buf_len) - m_in_buffer[i].m_tail, MSG_DONTWAIT);
-                        // printf("Receiver: buf_len ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
-                            FD_CLR(m_sock_fd[i], &m_fds);
-                            continue;
-                        }
-                        if (ret < 0) ret = 0;
-
-                        pthread_mutex_lock(&m_in_mutex);
-                        m_in_buffer[i].m_tail += ret;
-                        if ( m_in_buffer[i].m_tail == sizeof(m_in_buffer[i].m_buf_len) ) { // buf_len has been read in completely.
-                            m_in_buffer[i].m_buf_len = * (int *)m_in_buffer[i].m_buffer;
-                            m_in_buffer[i].m_msg_len = m_in_buffer[i].m_buf_len - sizeof(int);
-                        }
-                        pthread_mutex_unlock(&m_in_mutex);
-                    } else { // buf_len has been read in completely.
-                        // receive
-                        // printf("Receiver: recv()\n"); fflush(stdout);
-                        ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
-                                   m_in_buffer[i].m_msg_len, MSG_DONTWAIT);
-                        // printf("Receiver: ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
-                            FD_CLR(m_sock_fd[i], &m_fds);
-                            continue;
-                        }
-                        if (ret < 0) ret = 0;
-
-                        pthread_mutex_lock(&m_in_mutex);
-                        if (ret < m_in_buffer[i].m_msg_len) {
-                            m_in_buffer[i].m_tail += ret;
-                            m_in_buffer[i].m_msg_len -= ret;
-                        } else if (ret == m_in_buffer[i].m_msg_len) {
-                            m_in_buffer[i].m_state = 1;
-                            m_in_buffer[i].m_head = 0;
-                            m_in_buffer[i].m_tail = 0;
-                            m_in_buffer[i].m_msg_len = 0;
-                            m_in_buffer[i].m_buf_len = 0;
-                            // memset m_out_buffer[i].m_buffer
-                        }
-                        pthread_mutex_unlock(&m_in_mutex);
+                // Every message needs to call recv() at least twice, first for message length and rest for the content.
+                if (! buf_len) { // buf_len hasn't been read in completely.
+                    // receive
+                    // printf("Receiver: buf_len recv()\n"); fflush(stdout);
+                    ret = recv(fd, &m_in_buffer[s_idx].m_buffer[m_in_buffer[s_idx].m_tail],
+                               sizeof(m_in_buffer[s_idx].m_buf_len) - m_in_buffer[s_idx].m_tail, MSG_DONTWAIT);
+                    // printf("Receiver: buf_len ret %d\n", ret); fflush(stdout);
+                    if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
+                        continue;
                     }
+                    if (ret < 0) ret = 0;
+
+                    pthread_mutex_lock(&m_in_mutex);
+                    m_in_buffer[s_idx].m_tail += ret;
+                    if ( m_in_buffer[s_idx].m_tail == sizeof(m_in_buffer[s_idx].m_buf_len) ) { // buf_len has been read in completely.
+                        m_in_buffer[s_idx].m_buf_len = * (int *)m_in_buffer[s_idx].m_buffer;
+                        m_in_buffer[s_idx].m_msg_len = m_in_buffer[s_idx].m_buf_len - sizeof(int);
+                    }
+                    pthread_mutex_unlock(&m_in_mutex);
+                } else { // buf_len has been read in completely.
+                    // receive
+                    // printf("Receiver: recv()\n"); fflush(stdout);
+                    ret = recv(fd, &m_in_buffer[s_idx].m_buffer[m_in_buffer[s_idx].m_tail],
+                               m_in_buffer[s_idx].m_msg_len, MSG_DONTWAIT);
+                    // printf("Receiver: ret %d\n", ret); fflush(stdout);
+                    if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
+                        continue;
+                    }
+                    if (ret < 0) ret = 0;
+
+                    pthread_mutex_lock(&m_in_mutex);
+                    if (ret < m_in_buffer[s_idx].m_msg_len) {
+                        m_in_buffer[s_idx].m_tail += ret;
+                        m_in_buffer[s_idx].m_msg_len -= ret;
+                    } else if (ret == m_in_buffer[s_idx].m_msg_len) {
+                        m_in_buffer[s_idx].m_state = 1;
+                        m_in_buffer[s_idx].m_head = 0;
+                        m_in_buffer[s_idx].m_tail = 0;
+                        m_in_buffer[s_idx].m_msg_len = 0;
+                        m_in_buffer[s_idx].m_buf_len = 0;
+                        // memset m_out_buffer[s_idx].m_buffer
+                    }
+                    pthread_mutex_unlock(&m_in_mutex);
                 }
             }
         }
     }
 
-    // printf("Receiver: break select\n"); fflush(stdout);
+    free(events);
+    close(epoll_fd);
 }
 
 void Receiver::closeAllSocket() {
