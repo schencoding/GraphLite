@@ -70,6 +70,7 @@ void Node::clearCurInMsg() {
 
         // m_cur_in_msg.clear(); memory leak
         freeInMsgVector();
+    }
 }
 
 void Node::freeInMsgVector() {
