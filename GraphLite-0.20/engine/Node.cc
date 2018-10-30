@@ -68,7 +68,9 @@ void Node::clearCurInMsg() {
             worker.m_free_list.free(m_cur_in_msg[i]);
         }
 
-        m_cur_in_msg.clear();
+        // m_cur_in_msg.clear(); memory leak
+        freeInMsgVector();
+        initInMsg();
     }
 }
 
