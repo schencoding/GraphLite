@@ -65,6 +65,20 @@ public:
     class MessageIterator: public GenericLinkIterator {
     public:
         /**
+         * Get the source vertex of the current message.
+         * @see getCurrent()
+         * @return the source vertex
+         */
+        int64_t getSrc() { return ( (Msg *)getCurrent() )->s_id; }
+
+        /**
+         * Get the destination vertex of the current message.
+         * @see getCurrent()
+         * @return the destination vertex
+         */
+        int64_t getDst() { return ( (Msg *)getCurrent() )->d_id; }
+
+        /**
          * Get message value.
          * @return message value
          */
