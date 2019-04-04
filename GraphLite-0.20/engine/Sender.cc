@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * @see Sender.h
  *
  */
@@ -32,8 +32,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "Sender.h"
+
+/** Get elapsed time. */
+#define elapsedTime(begin, end) \
+    (double)(end.tv_sec - begin.tv_sec) + \
+    ((double)end.tv_usec - (double)begin.tv_usec) / 1e6;
 
 void Sender::init(int cnt) {
 
@@ -109,8 +115,7 @@ void Sender::connectServer(int id) {
             if (retries % 10 == 0) {
                 perror("Sender: connect");
                 if (retries >= 60) {
-                  fprintf(stderr, "Sender cannot connect after %d retries\n", 
-                          retries);
+                  fprintf(stderr, "Sender cannot connect after %d retries\n", retries);
                   // exit(1);
                 }
             }
@@ -120,77 +125,98 @@ void Sender::connectServer(int id) {
 
         memset( buffer, 0, sizeof(buffer) );
         sprintf(buffer, "%d", id);
-        send(m_sock_fd[i], buffer, sizeof(buffer), 0);
+        int64_t ret = send(m_sock_fd[i], buffer, sizeof(buffer), 0);
+        if (ret >= 0) {
+            // printf("sent bytes: %ld\n", ret); fflush(stdout);
+        }
     }
 
     printf("Sender: connect all server success\n"); fflush(stdout);
 }
 
-void Sender::sendMsg() {
-    fd_set fds_orig;
+void Sender::selectSend(fd_set& fds_orig, int64_t& sent_bytes, double& elapsed) {
+    struct timeval b_time, e_time;
+
+    FD_ZERO(&m_fds);
+    m_fds = fds_orig;
+
     struct timeval tv;
     int ret;
 
-    FD_ZERO(&fds_orig);
-    for (int i = 0; i < m_serv_cnt; ++i) {
-        FD_SET(m_sock_fd[i], &fds_orig);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+
+    ret = select(m_max_sock + 1, NULL, &m_fds, NULL, &tv); // writable
+    // printf("Sender: select ret %d\n", ret); fflush(stdout);
+    if (ret < 0) {
+        perror("Sender: select\n"); fflush(stdout);
+        return;
+    } else if (! ret) {
+        printf("Sender: timeout\n"); fflush(stdout);
+        return;
     }
 
-    // int loop = 0;
-    while (! main_term) {
-        // ++loop;
-        // printf("Sender: loop %d\n", loop); fflush(stdout);
+    for (int i = 0; i < m_serv_cnt; ++i) {
+        if (m_out_buffer[i].m_state) { // just test, at least one buffer has data.
+            if ( FD_ISSET(m_sock_fd[i], &m_fds) ) { // Socket i has been set.
+                // double check
+                pthread_mutex_lock(&m_out_mutex);
+                int state = m_out_buffer[i].m_state;
+                pthread_mutex_unlock(&m_out_mutex);
 
-        FD_ZERO(&m_fds);
-        m_fds = fds_orig;
-
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-
-        ret = select(m_max_sock + 1, NULL, &m_fds, NULL, &tv); // writable
-        // printf("Sender: select ret %d\n", ret); fflush(stdout);
-        if (ret < 0) {
-            perror("Sender: select");
-            break;
-        } else if (!ret) {
-            printf("Sender: timeout\n"); fflush(stdout);
-            continue;
-        }
-
-        for (int i = 0; i < m_serv_cnt; ++i) {
-            if (m_out_buffer[i].m_state) { // At least one buffer has data.
-                if ( FD_ISSET(m_sock_fd[i], &m_fds) ) { // Socket i has been set.
-                    // send
+                if (state) {
                     // printf("Sender: send()\n"); fflush(stdout);
+                    gettimeofday(&b_time, NULL);
                     ret = send(m_sock_fd[i], m_out_buffer[i].m_buffer + m_out_buffer[i].m_head,
                                m_out_buffer[i].m_buf_len, MSG_DONTWAIT);
+                    gettimeofday(&e_time, NULL);
+                    elapsed += elapsedTime(b_time, e_time);
                     // printf("Sender: ret %d\n", ret); fflush(stdout);
-                    if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                        FD_CLR(m_sock_fd[i], &m_fds);
-                        continue;
-                    }
-                    if (ret < 0) ret = 0;
+                    if (ret <= 0)  continue;
 
-                    pthread_mutex_lock(&m_out_mutex);
+                    sent_bytes += ret;
                     if (ret < m_out_buffer[i].m_buf_len) {
                         m_out_buffer[i].m_head += ret;
                         m_out_buffer[i].m_buf_len -= ret;
                     } else if (ret == m_out_buffer[i].m_buf_len) {
-                        m_out_buffer[i].m_state = 0;
                         m_out_buffer[i].m_head = 0;
                         m_out_buffer[i].m_tail = 0;
                         m_out_buffer[i].m_msg_len = 0;
                         m_out_buffer[i].m_buf_len = 0;
                         // memset m_out_buffer[i].m_buffer
+
+                        pthread_mutex_lock(&m_out_mutex);
+                        m_out_buffer[i].m_state = 0;
+                        pthread_cond_signal(&m_out_cond);
+                        pthread_mutex_unlock(&m_out_mutex);
                     }
-                    pthread_cond_signal(&m_out_cond);
-                    pthread_mutex_unlock(&m_out_mutex);
                 }
             }
         }
     }
+}
 
+void Sender::sendMsg() {
+    int64_t sent_bytes = 0;
+    double elapsed = 0;
+
+    printf("Sender::sendMsg()\n"); fflush(stdout);
+
+    fd_set fds_orig;
+    FD_ZERO(&fds_orig);
+
+    for (int i = 0; i < m_serv_cnt; ++i) {
+        FD_SET(m_sock_fd[i], &fds_orig);
+    }
+
+    while (! main_term)  selectSend(fds_orig, sent_bytes, elapsed);
     // printf("Sender: break select\n"); fflush(stdout);
+
+    // the lase send after term
+    selectSend(fds_orig, sent_bytes, elapsed);
+
+    // printf("sent bytes: %ld, network bandwidth: %f MB/s\n", sent_bytes, sent_bytes / 1e6 / elapsed);
+    // fflush(stdout);
 }
 
 void Sender::closeAllSocket() {

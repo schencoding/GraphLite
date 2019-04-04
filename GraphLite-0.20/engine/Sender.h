@@ -85,6 +85,14 @@ public:
      */
     void connectServer(int id);
 
+   /**
+     * Select sockets and send messages.
+     * @param fds_orig original file descriptors
+     * @retval sent_bytes
+     * @retval elapsed elapsed time by second
+     */
+    void selectSend(fd_set& fds_orig, int64_t& sent_bytes, double& elapsed);
+
     /** Send messages to all servers continuously. */
     void sendMsg();
 

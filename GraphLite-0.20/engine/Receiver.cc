@@ -3,11 +3,11 @@
  * @author  Songjie Niu, Shimin Chen
  * @version 0.1
  *
- * @section LICENSE 
- * 
+ * @section LICENSE
+ *
  * Copyright 2016 Shimin Chen (chensm@ict.ac.cn) and
  * Songjie Niu (niusongjie@ict.ac.cn)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * @section DESCRIPTION
- * 
+ *
  * @see Receiver.h
  *
  */
@@ -32,8 +32,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "Receiver.h"
+
+/** Get elapsed time. */
+#define elapsedTime(begin, end) \
+    (double)(end.tv_sec - begin.tv_sec) + \
+    ((double)end.tv_usec - (double)begin.tv_usec) / 1e6;
 
 void Receiver::init(int cnt) {
 
@@ -119,19 +125,25 @@ void Receiver::acceptClient() {
         }
 
         memset( buffer, 0, sizeof(buffer) );
-        recv(sock, buffer, sizeof(buffer), 0);
+        int64_t ret = recv(sock, buffer, sizeof(buffer), 0);
+        if (ret >= 0) {
+            // printf("recv bytes: %ld\n", ret); fflush(stdout);
+        }
         machine_no = atoi(buffer);
         m_sock_fd[machine_no] = sock;
-        
     }
 
     printf("Receiver: accept all client success\n"); fflush(stdout);
 }
 
 void Receiver::recvMsg() {
+    int64_t recv_bytes = 0;
+    double elapsed = 0;
+    struct timeval b_time, e_time;
+
     fd_set fds_orig;
     struct timeval tv;
-    int ret;
+    int64_t ret;
 
     FD_ZERO(&fds_orig);
     for (int i = 0; i < m_cli_cnt; ++i) {
@@ -166,59 +178,58 @@ void Receiver::recvMsg() {
         }
 
         for (int i = 0; i < m_cli_cnt; ++i) {
-            if (! m_in_buffer[i].m_state) { // At least one buffer doesn't have complete data.
+            if (! m_in_buffer[i].m_state) { // just test, at least one buffer doesn't have complete data.
                 if ( FD_ISSET(m_sock_fd[i], &m_fds) ) { // Socket i has been set.
-
-                    // get buf_len remained
+                    // double check
                     pthread_mutex_lock(&m_in_mutex);
-                    int buf_len = m_in_buffer[i].m_buf_len;
+                    int state = m_in_buffer[i].m_state;
                     pthread_mutex_unlock(&m_in_mutex);
 
-                    // Every message needs to call recv() at least twice, first for message length and rest for the content.
-                    if (! buf_len) { // buf_len hasn't been read in completely.
-                        // receive
-                        // printf("Receiver: buf_len recv()\n"); fflush(stdout);
-                        ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
-                                   sizeof(m_in_buffer[i].m_buf_len) - m_in_buffer[i].m_tail, MSG_DONTWAIT);
-                        // printf("Receiver: buf_len ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
-                            FD_CLR(m_sock_fd[i], &m_fds);
-                            continue;
-                        }
-                        if (ret < 0) ret = 0;
+                    if (! state) {
+                        // Every message needs to call recv() at least twice, first for message length and rest for the content.
+                        if (! m_in_buffer[i].m_buf_len) { // buf_len hasn't been read in completely.
+                            // printf("Receiver: buf_len recv()\n"); fflush(stdout);
+                            gettimeofday(&b_time, NULL);
+                            ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
+                                       sizeof(m_in_buffer[i].m_buf_len) - m_in_buffer[i].m_tail, MSG_DONTWAIT);
+                            gettimeofday(&e_time, NULL);
+                            elapsed += elapsedTime(b_time, e_time);
+                            // printf("Receiver: buf_len ret %d\n", ret); fflush(stdout);
+                            if (ret <= 0)  continue;
 
-                        pthread_mutex_lock(&m_in_mutex);
-                        m_in_buffer[i].m_tail += ret;
-                        if ( m_in_buffer[i].m_tail == sizeof(m_in_buffer[i].m_buf_len) ) { // buf_len has been read in completely.
-                            m_in_buffer[i].m_buf_len = * (int *)m_in_buffer[i].m_buffer;
-                            m_in_buffer[i].m_msg_len = m_in_buffer[i].m_buf_len - sizeof(int);
-                        }
-                        pthread_mutex_unlock(&m_in_mutex);
-                    } else { // buf_len has been read in completely.
-                        // receive
-                        // printf("Receiver: recv()\n"); fflush(stdout);
-                        ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
-                                   m_in_buffer[i].m_msg_len, MSG_DONTWAIT);
-                        // printf("Receiver: ret %d\n", ret); fflush(stdout);
-                        if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) { // When peer client socket close, server receive ret = 0, necessary.
-                            FD_CLR(m_sock_fd[i], &m_fds);
-                            continue;
-                        }
-                        if (ret < 0) ret = 0;
-
-                        pthread_mutex_lock(&m_in_mutex);
-                        if (ret < m_in_buffer[i].m_msg_len) {
+                            recv_bytes += ret;
                             m_in_buffer[i].m_tail += ret;
-                            m_in_buffer[i].m_msg_len -= ret;
-                        } else if (ret == m_in_buffer[i].m_msg_len) {
-                            m_in_buffer[i].m_state = 1;
-                            m_in_buffer[i].m_head = 0;
-                            m_in_buffer[i].m_tail = 0;
-                            m_in_buffer[i].m_msg_len = 0;
-                            m_in_buffer[i].m_buf_len = 0;
-                            // memset m_out_buffer[i].m_buffer
+                            if ( m_in_buffer[i].m_tail == sizeof(m_in_buffer[i].m_buf_len) ) { // buf_len has been read in completely.
+                                m_in_buffer[i].m_buf_len = * (int *)m_in_buffer[i].m_buffer;
+                                m_in_buffer[i].m_msg_len = m_in_buffer[i].m_buf_len - sizeof(int);
+                            }
+                        } else { // buf_len has been read in completely.
+                            // receive
+                            // printf("Receiver: recv()\n"); fflush(stdout);
+                            gettimeofday(&b_time, NULL);
+                            ret = recv(m_sock_fd[i], &m_in_buffer[i].m_buffer[m_in_buffer[i].m_tail],
+                                       m_in_buffer[i].m_msg_len, MSG_DONTWAIT);
+                            gettimeofday(&e_time, NULL);
+                            elapsed += elapsedTime(b_time, e_time);
+                            // printf("Receiver: ret %d\n", ret); fflush(stdout);
+                            if (ret <= 0)  continue;
+
+                            recv_bytes += ret;
+                            if (ret < m_in_buffer[i].m_msg_len) {
+                                m_in_buffer[i].m_tail += ret;
+                                m_in_buffer[i].m_msg_len -= ret;
+                            } else if (ret == m_in_buffer[i].m_msg_len) {
+                                m_in_buffer[i].m_head = 0;
+                                m_in_buffer[i].m_tail = 0;
+                                m_in_buffer[i].m_msg_len = 0;
+                                m_in_buffer[i].m_buf_len = 0;
+                                // memset m_out_buffer[i].m_buffer
+
+                                pthread_mutex_lock(&m_in_mutex);
+                                m_in_buffer[i].m_state = 1;
+                                pthread_mutex_unlock(&m_in_mutex);
+                            }
                         }
-                        pthread_mutex_unlock(&m_in_mutex);
                     }
                 }
             }
@@ -226,6 +237,8 @@ void Receiver::recvMsg() {
     }
 
     // printf("Receiver: break select\n"); fflush(stdout);
+    // printf("recv bytes: %ld, network bandwidth: %f MB/s\n", recv_bytes, recv_bytes / 1e6 / elapsed);
+    // fflush(stdout);
 }
 
 void Receiver::closeAllSocket() {
